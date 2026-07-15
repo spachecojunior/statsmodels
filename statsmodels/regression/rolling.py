@@ -9,14 +9,12 @@ License: 3-clause BSD
 """
 from statsmodels.compat.numpy import lstsq
 from statsmodels.compat.pandas import (
-    Appender,
-    Substitution,
     cache_readonly,
     call_cached_func,
     get_cached_doc,
 )
 
-from collections import namedtuple
+from typing import NamedTuple
 
 import numpy as np
 from pandas import DataFrame, MultiIndex, Series
@@ -24,10 +22,12 @@ from scipy import stats
 
 from statsmodels.base import model
 from statsmodels.base.model import LikelihoodModelResults, Model
+from statsmodels.formula._manager import FormulaManager
 from statsmodels.regression.linear_model import (
     RegressionModel,
     RegressionResults,
 )
+from statsmodels.tools.docstring_helpers import Appender, Substitution
 from statsmodels.tools.validation import array_like, int_like, string_like
 
 
@@ -37,20 +37,17 @@ def strip4(line):
     return line
 
 
-RollingStore = namedtuple(
-    "RollingStore",
-    [
-        "params",
-        "ssr",
-        "llf",
-        "nobs",
-        "s2",
-        "xpxi",
-        "xeex",
-        "centered_tss",
-        "uncentered_tss",
-    ],
-)
+class RollingStore(NamedTuple):
+    params: np.ndarray
+    ssr: np.ndarray
+    llf: np.ndarray
+    nobs: np.ndarray
+    s2: np.ndarray
+    xpxi: np.ndarray
+    xeex: np.ndarray
+    centered_tss: np.ndarray
+    uncentered_tss: np.ndarray
+
 
 common_params = "\n".join(map(strip4, model._model_params_doc.split("\n")))
 window_parameters = """\
@@ -333,6 +330,7 @@ class RollingWLS:
         -------
         RollingRegressionResults
             Estimation results where all pre-sample values are nan-filled.
+
         """
         method = string_like(
             method, "method", options=("inv", "lstsq", "pinv")
@@ -394,21 +392,21 @@ class RollingWLS:
         if eval_env is None:
             eval_env = 2
         elif eval_env == -1:
-            from patsy import EvalEnvironment
-
-            eval_env = EvalEnvironment({})
+            mgr = FormulaManager()
+            eval_env = mgr.get_empty_eval_env()
         else:
             eval_env += 1  # we're going down the stack again
         missing = kwargs.get("missing", "skip")
-        from patsy import NAAction, dmatrices
 
-        na_action = NAAction(on_NA="raise", NA_types=[])
-        result = dmatrices(
+        na_action = FormulaManager().get_na_action(action="raise", types=[])
+
+        mgr = FormulaManager()
+        result = mgr.get_matrices(
             formula,
             data,
-            eval_env,
-            return_type="dataframe",
-            NA_action=na_action,
+            eval_env=eval_env,
+            pandas=True,
+            na_action=na_action,
         )
 
         endog, exog = result
@@ -479,6 +477,7 @@ class RollingRegressionResults:
         p-values.
     cov_type : str
         Name of covariance estimator
+
     """
 
     _data_in_cache = tuple()
@@ -639,6 +638,7 @@ class RollingRegressionResults:
             the returned covariance is a DataFrame with a MultiIndex with
             key (observation, variable), so that the covariance for
             observation with index i is cov.loc[i].
+
         """
         return self._wrap(self._cov_params)
 
@@ -787,6 +787,7 @@ class RollingRegressionResults:
         -------
         Figure
             The matplotlib Figure object.
+
         """
         from statsmodels.graphics.utils import _import_mpl, create_mpl_fig
 

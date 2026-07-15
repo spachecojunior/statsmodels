@@ -4,28 +4,27 @@ Compatibility tools for differences between Python 2 and 3
 
 import platform
 import sys
-from typing import Literal
+
+PYTHON_IMPL_WASM = sys.platform == "emscripten" or platform.machine() in [
+    "wasm32",
+    "wasm64",
+]
 
 
-PYTHON_IMPL_WASM = (
-    sys.platform == "emscripten" or platform.machine() in ["wasm32", "wasm64"]
-)
-
-
-asunicode = lambda x, _: str(x)  # noqa:E731
+def asunicode(x, _):
+    return str(x)
 
 
 __all__ = [
-    "asunicode",
-    "asstr",
-    "asbytes",
-    "Literal",
-    "lmap",
-    "lzip",
-    "lrange",
-    "lfilter",
-    "with_metaclass",
     "PYTHON_IMPL_WASM",
+    "asbytes",
+    "asstr",
+    "asunicode",
+    "lfilter",
+    "lmap",
+    "lrange",
+    "lzip",
+    "with_metaclass",
 ]
 
 
@@ -60,6 +59,7 @@ def lfilter(*args, **kwargs):
 
 def with_metaclass(meta, *bases):
     """Create a base class with a metaclass."""
+
     # This requires a bit of explanation: the basic idea is to make a dummy
     # metaclass for one level of class instantiation that replaces itself with
     # the actual metaclass.

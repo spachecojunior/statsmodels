@@ -1,18 +1,18 @@
 from statsmodels.compat.scipy import SP_LT_15, SP_LT_17
+
+from numpy.testing import assert_, assert_almost_equal
 import pytest
-from numpy.testing import assert_
-from numpy.testing import assert_almost_equal
 
 from statsmodels.base.optimizer import (
-    _fit_newton,
-    _fit_nm,
+    _fit_basinhopping,
     _fit_bfgs,
     _fit_cg,
-    _fit_ncg,
-    _fit_powell,
     _fit_lbfgs,
-    _fit_basinhopping,
     _fit_minimize,
+    _fit_ncg,
+    _fit_newton,
+    _fit_nm,
+    _fit_powell,
 )
 
 fit_funcs = {
@@ -29,7 +29,7 @@ fit_funcs = {
 
 
 def dummy_func(x):
-    return x ** 2
+    return x**2
 
 
 def dummy_score(x):
@@ -62,79 +62,81 @@ def dummy_constraints():
 
 
 @pytest.mark.smoke
-def test_full_output_false(reset_randomstate):
+@pytest.mark.parametrize("method", fit_funcs.keys())
+def test_full_output_false(method):
     # newton needs f, score, start, fargs, kwargs
     # bfgs needs f, score start, fargs, kwargs
     # nm needs ""
     # cg ""
     # ncg ""
     # powell ""
-    for method in fit_funcs:
-        func = fit_funcs[method]
-        if method == "newton":
-            xopt, retvals = func(
-                dummy_func,
-                dummy_score,
-                [1.0],
-                (),
-                {},
-                hess=dummy_hess,
-                full_output=False,
-                disp=0,
-            )
+    func = fit_funcs[method]
+    kwargs = {"seed": 32839013} if method == "basinhopping" else {}
+    if method == "newton":
+        xopt, retvals = func(
+            dummy_func,
+            dummy_score,
+            [1.0],
+            (),
+            kwargs=kwargs,
+            hess=dummy_hess,
+            full_output=False,
+            disp=0,
+        )
 
-        else:
-            xopt, retvals = func(
-                dummy_func,
-                dummy_score,
-                [1.0],
-                (),
-                {},
-                full_output=False,
-                disp=0
-            )
-        assert_(retvals is None)
-        if method == "powell" and SP_LT_15:
-            # Fixed in SP 1.5
-            assert_(xopt.shape == () and xopt.size == 1)
-        else:
-            assert_(len(xopt) == 1)
+    else:
+        xopt, retvals = func(
+            dummy_func,
+            dummy_score,
+            [1.0],
+            (),
+            kwargs=kwargs,
+            full_output=False,
+            disp=0,
+        )
+    assert_(retvals is None)
+    if method == "powell" and SP_LT_15:
+        # Fixed in SP 1.5
+        assert_(xopt.shape == () and xopt.size == 1)
+    else:
+        assert_(len(xopt) == 1)
 
 
-def test_full_output(reset_randomstate):
-    for method in fit_funcs:
-        func = fit_funcs[method]
-        if method == "newton":
-            xopt, retvals = func(
-                dummy_func,
-                dummy_score,
-                [1.0],
-                (),
-                {},
-                hess=dummy_hess,
-                full_output=True,
-                disp=0,
-            )
+@pytest.mark.parametrize("method", fit_funcs.keys())
+def test_full_output(method):
+    func = fit_funcs[method]
+    kwargs = {"seed": 32839013} if method == "basinhopping" else {}
+    if method == "newton":
+        xopt, retvals = func(
+            dummy_func,
+            dummy_score,
+            [1.0],
+            (),
+            kwargs,
+            hess=dummy_hess,
+            full_output=True,
+            disp=0,
+        )
 
-        else:
-            xopt, retvals = func(
-                dummy_func,
-                dummy_score,
-                [1.0],
-                (),
-                {},
-                full_output=True,
-                disp=0
-            )
+    else:
+        xopt, retvals = func(
+            dummy_func,
+            dummy_score,
+            [1.0],
+            (),
+            kwargs,
+            full_output=True,
+            disp=0,
+        )
 
-        assert_(retvals is not None)
-        assert_("converged" in retvals)
+    assert_(retvals is not None)
+    assert_("converged" in retvals)
 
-        if method == "powell" and SP_LT_15:
-            # Fixed in SP 1.5
-            assert_(xopt.shape == () and xopt.size == 1)
-        else:
-            assert_(len(xopt) == 1)
+    if method == "powell" and SP_LT_15:
+        # Fixed in SP 1.5
+        assert_(xopt.shape == () and xopt.size == 1)
+    else:
+        assert_(len(xopt) == 1)
 
 
 def test_minimize_scipy_slsqp():
@@ -192,3 +194,17 @@ def test_minimize_scipy_nm():
         disp=0,
     )
     assert_almost_equal(xopt, [2, 3.5], 4)
+
+
+def test_lbfgs_disp_false_no_output(capsys):
+    xopt, _ = _fit_lbfgs(
+        dummy_func,
+        dummy_score,
+        [1.0],
+        (),
+        {},
+        full_output=False,
+        disp=False,
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""

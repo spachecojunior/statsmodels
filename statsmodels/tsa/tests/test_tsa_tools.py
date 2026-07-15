@@ -1,6 +1,5 @@
-"""tests for some time series analysis functions
+"""tests for some time series analysis functions"""
 
-"""
 from statsmodels.compat.pandas import (
     PD_LT_2_2_0,
     QUARTER_END,
@@ -14,7 +13,6 @@ from numpy.testing import (
     assert_array_almost_equal,
     assert_array_equal,
     assert_equal,
-    assert_raises,
 )
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
@@ -42,9 +40,7 @@ def test_acf():
     acf_x = stattools.acf(x100, adjusted=False, fft=False, nlags=20)
     assert_array_almost_equal(mlacf.acf100.ravel(), acf_x, 8)  # why only dec=8
     acf_x = stattools.acf(x1000, adjusted=False, fft=False, nlags=20)
-    assert_array_almost_equal(
-        mlacf.acf1000.ravel(), acf_x, 8
-    )  # why only dec=9
+    assert_array_almost_equal(mlacf.acf1000.ravel(), acf_x, 8)  # why only dec=9
 
 
 def test_ccf():
@@ -91,22 +87,25 @@ def test_yule_walker_inter():
     regression.yule_walker(x, 3)
 
 
-def test_duplication_matrix(reset_randomstate):
+def test_duplication_matrix():
+    rs = np.random.RandomState(664831)
     for k in range(2, 10):
-        m = tools.unvech(np.random.randn(k * (k + 1) // 2))
+        m = tools.unvech(rs.randn(k * (k + 1) // 2))
         Dk = tools.duplication_matrix(k)
         assert np.array_equal(vec(m), np.dot(Dk, vech(m)))
 
 
-def test_elimination_matrix(reset_randomstate):
+def test_elimination_matrix():
+    rs = np.random.RandomState(664832)
     for k in range(2, 10):
-        m = np.random.randn(k, k)
+        m = rs.randn(k, k)
         Lk = tools.elimination_matrix(k)
         assert np.array_equal(vech(m), np.dot(Lk, vec(m)))
 
 
-def test_commutation_matrix(reset_randomstate):
-    m = np.random.randn(4, 3)
+def test_commutation_matrix():
+    rs = np.random.RandomState(664833)
+    m = rs.randn(4, 3)
     K = tools.commutation_matrix(4, 3)
     assert np.array_equal(vec(m.T), np.dot(K, vec(m)))
 
@@ -122,9 +121,7 @@ def test_vech():
 
 
 def test_ar_transparams():
-    arr = np.array(
-        [-1000.0, -100.0, -10.0, 1.0, 0.0, 1.0, 10.0, 100.0, 1000.0]
-    )
+    arr = np.array([-1000.0, -100.0, -10.0, 1.0, 0.0, 1.0, 10.0, 100.0, 1000.0])
     assert not np.isnan(tools._ar_transparams(arr)).any()
 
 
@@ -136,8 +133,8 @@ class TestLagmat:
         cols = list(cls.macro_df.columns)
         cls.realgdp_loc = cols.index("realgdp")
         cls.cpi_loc = cols.index("cpi")
-        np.random.seed(12345)
-        cls.random_data = np.random.randn(100)
+        rs = np.random.RandomState(12345)
+        cls.random_data = rs.randn(100)
 
         index = [
             str(int(yr)) + "-Q" + str(int(qu))
@@ -273,9 +270,7 @@ class TestLagmat:
         nddata = data.astype(float)
         lagmat = stattools.lagmat(nddata[:, 2], 3, trim="Both")
         results = np.column_stack((nddata[3:, np.array([0, 1, 3])], lagmat))
-        lag_data = tools.add_lag(
-            data, self.realgdp_loc, 3, insert=False, drop=True
-        )
+        lag_data = tools.add_lag(data, self.realgdp_loc, 3, insert=False, drop=True)
         assert_equal(lag_data, results)
 
     def test_dataframe_without_pandas(self):
@@ -325,27 +320,25 @@ class TestLagmat:
         assert_frame_equal(lead, expected.iloc[:, :4])
 
     def test_too_few_observations(self):
-        assert_raises(
-            ValueError, stattools.lagmat, self.macro_df, 300, use_pandas=True
-        )
-        assert_raises(ValueError, stattools.lagmat, self.macro_df.values, 300)
+        with pytest.raises(ValueError):
+            stattools.lagmat(self.macro_df, 300, use_pandas=True)
+        with pytest.raises(ValueError):
+            stattools.lagmat(self.macro_df.values, 300)
 
     def test_unknown_trim(self):
-        assert_raises(
-            ValueError,
-            stattools.lagmat,
-            self.macro_df,
-            3,
-            trim="unknown",
-            use_pandas=True,
-        )
-        assert_raises(
-            ValueError,
-            stattools.lagmat,
-            self.macro_df.values,
-            3,
-            trim="unknown",
-        )
+        with pytest.raises(ValueError):
+            stattools.lagmat(
+                self.macro_df,
+                3,
+                trim="unknown",
+                use_pandas=True,
+            )
+        with pytest.raises(ValueError):
+            stattools.lagmat(
+                self.macro_df.values,
+                3,
+                trim="unknown",
+            )
 
     def test_dataframe_forward(self):
         data = self.macro_df
@@ -375,38 +368,34 @@ class TestLagmat:
         assert_frame_equal(lead, expected.iloc[:, :4])
 
     def test_pandas_errors(self):
-        assert_raises(
-            ValueError,
-            stattools.lagmat,
-            self.macro_df,
-            3,
-            trim="none",
-            use_pandas=True,
-        )
-        assert_raises(
-            ValueError,
-            stattools.lagmat,
-            self.macro_df,
-            3,
-            trim="backward",
-            use_pandas=True,
-        )
-        assert_raises(
-            ValueError,
-            stattools.lagmat,
-            self.series,
-            3,
-            trim="none",
-            use_pandas=True,
-        )
-        assert_raises(
-            ValueError,
-            stattools.lagmat,
-            self.series,
-            3,
-            trim="backward",
-            use_pandas=True,
-        )
+        with pytest.raises(ValueError):
+            stattools.lagmat(
+                self.macro_df,
+                3,
+                trim="none",
+                use_pandas=True,
+            )
+        with pytest.raises(ValueError):
+            stattools.lagmat(
+                self.macro_df,
+                3,
+                trim="backward",
+                use_pandas=True,
+            )
+        with pytest.raises(ValueError):
+            stattools.lagmat(
+                self.series,
+                3,
+                trim="none",
+                use_pandas=True,
+            )
+        with pytest.raises(ValueError):
+            stattools.lagmat(
+                self.series,
+                3,
+                trim="backward",
+                use_pandas=True,
+            )
 
     def test_series_forward(self):
         expected = pd.DataFrame(
@@ -504,12 +493,8 @@ class TestDetrend:
 
     def test_detrend_1d(self):
         data = self.data_1d
-        assert_array_almost_equal(
-            tools.detrend(data, order=1), np.zeros_like(data)
-        )
-        assert_array_almost_equal(
-            tools.detrend(data, order=0), [-2, -1, 0, 1, 2]
-        )
+        assert_array_almost_equal(tools.detrend(data, order=1), np.zeros_like(data))
+        assert_array_almost_equal(tools.detrend(data, order=0), [-2, -1, 0, 1, 2])
 
     def test_detrend_2d(self):
         data = self.data_2d
@@ -531,14 +516,12 @@ class TestDetrend:
         assert_array_almost_equal(detrended.values, np.zeros_like(data))
         assert_series_equal(detrended, pd.Series(detrended.values, name="one"))
         detrended = tools.detrend(data, order=0)
-        assert_array_almost_equal(
-            detrended.values, pd.Series([-2, -1, 0, 1, 2])
-        )
+        assert_array_almost_equal(detrended.values, pd.Series([-2, -1, 0, 1, 2]))
         assert_series_equal(detrended, pd.Series(detrended.values, name="one"))
 
     def test_detrend_dataframe(self):
         columns = ["one", "two"]
-        index = [c for c in "abcde"]
+        index = list("abcde")
         data = pd.DataFrame(self.data_2d, columns=columns, index=index)
 
         detrended = tools.detrend(data, order=1, axis=0)
@@ -568,7 +551,8 @@ class TestDetrend:
         )
 
     def test_detrend_dim_too_large(self):
-        assert_raises(NotImplementedError, tools.detrend, np.ones((3, 3, 3)))
+        with pytest.raises(NotImplementedError):
+            tools.detrend(np.ones((3, 3, 3)))
 
 
 class TestAddTrend:
@@ -622,38 +606,32 @@ class TestAddTrend:
         expected = df.copy()
         expected["const"] = self.c
         expected["trend"] = self.t
-        expected["trend_squared"] = self.t ** 2
+        expected["trend_squared"] = self.t**2
         assert_frame_equal(expected, appended)
 
     def test_duplicate_const(self):
-        assert_raises(
-            ValueError,
-            tools.add_trend,
-            x=self.c,
-            trend="c",
-            has_constant="raise",
-        )
-        assert_raises(
-            ValueError,
-            tools.add_trend,
-            x=self.c,
-            trend="ct",
-            has_constant="raise",
-        )
+        with pytest.raises(ValueError):
+            tools.add_trend(
+                x=self.c,
+                trend="c",
+                has_constant="raise",
+            )
+        with pytest.raises(ValueError):
+            tools.add_trend(
+                x=self.c,
+                trend="ct",
+                has_constant="raise",
+            )
         df = pd.DataFrame(self.c)
-        assert_raises(
-            ValueError, tools.add_trend, x=df, trend="c", has_constant="raise"
-        )
-        assert_raises(
-            ValueError, tools.add_trend, x=df, trend="ct", has_constant="raise"
-        )
+        with pytest.raises(ValueError):
+            tools.add_trend(x=df, trend="c", has_constant="raise")
+        with pytest.raises(ValueError):
+            tools.add_trend(x=df, trend="ct", has_constant="raise")
 
         skipped = tools.add_trend(self.c, trend="c")
         assert_equal(skipped, self.c[:, None])
 
-        skipped_const = tools.add_trend(
-            self.c, trend="ct", has_constant="skip"
-        )
+        skipped_const = tools.add_trend(self.c, trend="ct", has_constant="skip")
         expected = np.vstack((self.c, self.t)).T
         assert_equal(skipped_const, expected)
 
@@ -665,13 +643,32 @@ class TestAddTrend:
         expected = np.vstack((self.c, self.c, self.t)).T
         assert_equal(added, expected)
 
+        with pytest.raises(
+            ValueError,
+            match=r"x contains one or more constant "
+            r"columns. Column\(s\) col_1 are constant. Adding"
+            r" a constant with trend='c' is not allowed.",
+        ):
+            add_trend_to = pd.DataFrame([self.t, self.c]).T
+            add_trend_to.columns = ["col_0", "col_1"]
+            tools.add_trend(x=add_trend_to, trend="c", has_constant="raise")
+
+        with pytest.raises(
+            ValueError,
+            match=r"x contains one or more constant "
+            r"columns. Column\(s\) 1 are constant. Adding"
+            r" a constant with trend='ct' is not allowed.",
+        ):
+            add_trend_to = pd.DataFrame([self.t, self.c]).T
+            tools.add_trend(x=add_trend_to, trend="ct", has_constant="raise")
+
     def test_dataframe_duplicate(self):
         df = pd.DataFrame(self.arr_2d, columns=["const", "trend"])
         tools.add_trend(df, trend="ct")
         tools.add_trend(df, trend="ct", prepend=True)
 
     def test_array(self):
-        base = np.vstack((self.arr_1d, self.c, self.t, self.t ** 2)).T
+        base = np.vstack((self.arr_1d, self.c, self.t, self.t**2)).T
         assert_equal(tools.add_trend(self.arr_1d), base[:, :2])
         assert_equal(tools.add_trend(self.arr_1d, trend="t"), base[:, [0, 2]])
         assert_equal(tools.add_trend(self.arr_1d, trend="ct"), base[:, :3])
@@ -685,9 +682,7 @@ class TestAddTrend:
                 self.arr_2d,
             )
         )
-        assert_equal(
-            tools.add_trend(self.arr_2d, prepend=True), base[:, [0, 3, 4]]
-        )
+        assert_equal(tools.add_trend(self.arr_2d, prepend=True), base[:, [0, 3, 4]])
         assert_equal(
             tools.add_trend(self.arr_2d, trend="t", prepend=True),
             base[:, [1, 3, 4]],
@@ -696,14 +691,11 @@ class TestAddTrend:
             tools.add_trend(self.arr_2d, trend="ct", prepend=True),
             base[:, [0, 1, 3, 4]],
         )
-        assert_equal(
-            tools.add_trend(self.arr_2d, trend="ctt", prepend=True), base
-        )
+        assert_equal(tools.add_trend(self.arr_2d, trend="ctt", prepend=True), base)
 
     def test_unknown_trend(self):
-        assert_raises(
-            ValueError, tools.add_trend, x=self.arr_1d, trend="unknown"
-        )
+        with pytest.raises(ValueError):
+            tools.add_trend(x=self.arr_1d, trend="unknown")
 
     def test_trend_n(self):
         assert_equal(tools.add_trend(self.arr_1d, "n"), self.arr_1d)
@@ -717,8 +709,8 @@ class TestLagmat2DS:
     def setup_class(cls):
         data = macrodata.load_pandas()
         cls.macro_df = data.data[["year", "quarter", "realgdp", "cpi"]]
-        np.random.seed(12345)
-        cls.random_data = np.random.randn(100)
+        rs = np.random.RandomState(12345)
+        cls.random_data = rs.randn(100)
         index = [
             str(int(yr)) + "-Q" + str(int(qu))
             for yr, qu in zip(cls.macro_df.year, cls.macro_df.quarter)
@@ -733,9 +725,7 @@ class TestLagmat2DS:
         for col in range(k):
             for i in range(lags + 1):
                 if i < lags:
-                    expected[i : -lags + i, (lags + 1) * col + i] = data[
-                        :, col
-                    ]
+                    expected[i : -lags + i, (lags + 1) * col + i] = data[:, col]
                 else:
                     expected[i:, (lags + 1) * col + i] = data[:, col]
         if trim == "front":
@@ -788,9 +778,7 @@ class TestLagmat2DS:
         expected = pd.DataFrame(expected, index=data.index, columns=cols)
         assert_frame_equal(lagmat, expected)
 
-        lagmat = stattools.lagmat2ds(
-            data.iloc[:, :2], 3, use_pandas=True, trim="both"
-        )
+        lagmat = stattools.lagmat2ds(data.iloc[:, :2], 3, use_pandas=True, trim="both")
         expected = self._prepare_expected(data.values[:, :2], 3)
         cols = []
         for c in data.iloc[:, :2]:
@@ -829,7 +817,8 @@ class TestLagmat2DS:
 
 
 def test_grangercausality():
-    data = np.random.rand(100, 2)
+    rs = np.random.RandomState(66483)
+    data = rs.rand(100, 2)
     with pytest.warns(FutureWarning, match="verbose"):
         out = stattools.grangercausalitytests(data, maxlag=2, verbose=False)
     result, models = out[1]

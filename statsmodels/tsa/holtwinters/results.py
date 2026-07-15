@@ -1,11 +1,9 @@
+from statsmodels.compat.pandas import deprecate_kwarg
+
 import numpy as np
 import pandas as pd
 from scipy.special import inv_boxcox
-from scipy.stats import (
-    boxcox,
-    rv_continuous,
-    rv_discrete,
-)
+from scipy.stats import boxcox, rv_continuous, rv_discrete
 from scipy.stats.distributions import rv_frozen
 
 from statsmodels.base.data import PandasData
@@ -15,6 +13,7 @@ from statsmodels.base.wrapper import (
     populate_wrapper,
     union_dicts,
 )
+from statsmodels.tools.rng_qrng import check_random_state
 
 
 class HoltWintersResults(Results):
@@ -307,9 +306,7 @@ class HoltWintersResults(Results):
         elif isinstance(orig_endog, pd.Series):
             dep_variable = orig_endog.name
         seasonal_periods = (
-            None
-            if self.model.seasonal is None
-            else self.model.seasonal_periods
+            None if self.model.seasonal is None else self.model.seasonal_periods
         )
         lookup = {
             "add": "Additive",
@@ -347,16 +344,14 @@ class HoltWintersResults(Results):
         ]
 
         smry = Summary()
-        smry.add_table_2cols(
-            self, gleft=top_left, gright=top_right, title=title
-        )
+        smry.add_table_2cols(self, gleft=top_left, gright=top_right, title=title)
         formatted = self.params_formatted  # type: pd.DataFrame
 
         def _fmt(x):
             abs_x = np.abs(x)
             scale = 1
             if np.isnan(x):
-                return f"{str(x):>20}"
+                return f"{x!s:>20}"
             if abs_x != 0:
                 scale = int(np.log10(abs_x))
             if scale > 4 or scale < -3:
@@ -371,7 +366,7 @@ class HoltWintersResults(Results):
                 [
                     _fmt(vals.iloc[1]),
                     f"{vals.iloc[0]:>20}",
-                    f"{str(bool(vals.iloc[2])):>20}",
+                    f"{bool(vals.iloc[2])!s:>20}",
                 ]
             )
         params_table = SimpleTable(
@@ -385,6 +380,7 @@ class HoltWintersResults(Results):
 
         return smry
 
+    @deprecate_kwarg("random_state", "rng")
     def simulate(
         self,
         nsimulations,
@@ -392,7 +388,8 @@ class HoltWintersResults(Results):
         repetitions=1,
         error="add",
         random_errors=None,
-        random_state=None,
+        *,
+        rng=None,
     ):
         r"""
         Random simulations using the state space formulation.
@@ -437,10 +434,12 @@ class HoltWintersResults(Results):
               the given values as random errors.
             * ``"bootstrap"``: Samples the random errors from the fit errors.
 
-        random_state : int or np.random.RandomState, optional
-            A seed for the random number generator or a
-            ``np.random.RandomState`` object. Only used if `random_errors` is
-            ``None``. Default is ``None``.
+        rng : int, np.random.Generator or np.random.RandomState, optional
+            A seed for a numpy.ranomd.RandomStte or a
+            ``np.random.RandomState`` or ``np.random.Generator`` object.
+            Only used if `random_errors` is ``None`` or ``"bootstrap"`` .
+            Default value of ``None`` used the singleton RandomState object
+            provided by NumPy.
 
         Returns
         -------
@@ -595,10 +594,7 @@ class HoltWintersResults(Results):
         # if model has no seasonal component, use 1 as period length
         m = max(self.model.seasonal_periods, 1)
         n_params = (
-            2
-            + 2 * self.model.has_trend
-            + (m + 1) * self.model.has_seasonal
-            + damped
+            2 + 2 * self.model.has_trend + (m + 1) * self.model.has_seasonal + damped
         )
         mul_seasonal = seasonal == "mul"
         mul_trend = trend == "mul"
@@ -637,16 +633,12 @@ class HoltWintersResults(Results):
         else:
             lvl[-1, :] = level[start_idx - 1]
             b[-1, :] = _trend[start_idx - 1]
-        if 0 <= start_idx and start_idx <= m:
+        if 0 <= start_idx <= m:
             initial_seasons = self.params["initial_seasons"]
-            _s = np.concatenate(
-                (initial_seasons[start_idx:], season[:start_idx])
-            )
+            _s = np.concatenate((initial_seasons[start_idx:], season[:start_idx]))
             s[-m:, :] = np.tile(_s, (repetitions, 1)).T
         else:
-            s[-m:, :] = np.tile(
-                season[start_idx - m : start_idx], (repetitions, 1)
-            ).T
+            s[-m:, :] = np.tile(season[start_idx - m : start_idx], (repetitions, 1)).T
 
         # set neutral values for unused features
         if trend is None:
@@ -678,30 +670,23 @@ class HoltWintersResults(Results):
                     "(nsimulations, repetitions)"
                 )
             eps = random_errors
-        elif random_errors == "bootstrap":
-            eps = np.random.choice(
-                resid, size=(nsimulations, repetitions), replace=True
-            )
-        elif random_errors is None:
-            if random_state is None:
-                eps = np.random.randn(nsimulations, repetitions) * sigma
-            elif isinstance(random_state, int):
-                rng = np.random.RandomState(random_state)
-                eps = rng.randn(nsimulations, repetitions) * sigma
-            elif isinstance(random_state, np.random.RandomState):
-                eps = random_state.randn(nsimulations, repetitions) * sigma
-            else:
-                raise ValueError(
-                    "Argument random_state must be None, an integer, "
-                    "or an instance of np.random.RandomState"
-                )
-        elif isinstance(random_errors, (rv_continuous, rv_discrete)):
-            params = random_errors.fit(resid)
-            eps = random_errors.rvs(*params, size=(nsimulations, repetitions))
-        elif isinstance(random_errors, rv_frozen):
-            eps = random_errors.rvs(size=(nsimulations, repetitions))
         else:
-            raise ValueError("Argument random_errors has unexpected value!")
+            rng = check_random_state(rng, deprecated=True)
+            if random_errors == "bootstrap":
+                eps = rng.choice(resid, size=(nsimulations, repetitions), replace=True)
+            elif random_errors is None:
+                eps = rng.standard_normal((nsimulations, repetitions)) * sigma
+            elif isinstance(random_errors, (rv_continuous, rv_discrete)):
+                params = random_errors.fit(resid)
+                eps = random_errors.rvs(
+                    *params, size=(nsimulations, repetitions), random_state=rng
+                )
+            elif isinstance(random_errors, rv_frozen):
+                eps = random_errors.rvs(
+                    size=(nsimulations, repetitions), random_state=rng
+                )
+            else:
+                raise ValueError("Argument random_errors has unexpected value!")
 
         for t in range(nsimulations):
             b0 = op_d(b[t - 1, :], phi)
@@ -717,9 +702,7 @@ class HoltWintersResults(Results):
                 eta = y0
                 kappa_l = 0 if mul_seasonal else s0
                 kappa_b = (
-                    kappa_l / lvl[t - 1, :]
-                    if mul_trend
-                    else kappa_l + lvl[t - 1, :]
+                    kappa_l / lvl[t - 1, :] if mul_trend else kappa_l + lvl[t - 1, :]
                 )
                 kappa_s = 0 if mul_seasonal else l0
 

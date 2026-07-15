@@ -1,3 +1,5 @@
+"""Dimension reduction regression models."""
+
 import warnings
 
 import numpy as np
@@ -49,6 +51,7 @@ class SlicedInverseReg(_DimReductionRegression):
     ----------
     KC Li (1991).  Sliced inverse regression for dimension reduction.
     JASA 86, 316-342.
+
     """
 
     def fit(self, slice_n=20, **kwargs):
@@ -59,12 +62,14 @@ class SlicedInverseReg(_DimReductionRegression):
         ----------
         slice_n : int, optional
             Target number of observations per slice
-        """
+        **kwargs
+            Extra keyword arguments. These trigger a RuntimeWarning.
 
+        """
         # Sample size per slice
         if len(kwargs) > 0:
             msg = "SIR.fit does not take any extra keyword arguments"
-            warnings.warn(msg)
+            warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
         # Number of slices
         n_slice = self.exog.shape[0] // slice_n
@@ -145,7 +150,7 @@ class SlicedInverseReg(_DimReductionRegression):
                 fmat = np.dot(np.dot(covx, jm), qcv)
                 fmat += np.dot(covxa, np.dot(umat, covxa.T))
                 fmat += np.dot(covxa, np.linalg.solve(Q, np.dot(jm.T, covx)))
-                ft[q*ndim + r] = fmat
+                ft[q * ndim + r] = fmat
 
         ch = np.linalg.solve(Q, np.dot(covxa.T, mn.T))
         cu = mn - np.dot(covxa, ch).T
@@ -154,13 +159,14 @@ class SlicedInverseReg(_DimReductionRegression):
             v = mn[i, :]
             for q in range(p):
                 for r in range(ndim):
-                    f = np.dot(u, np.dot(ft[q*ndim + r], v))
+                    f = np.dot(u, np.dot(ft[q * ndim + r], v))
                     gr[q, r] -= 2 * ph[i] * f
 
         return gr.ravel()
 
-    def fit_regularized(self, ndim=1, pen_mat=None, slice_n=20, maxiter=100,
-                        gtol=1e-3, **kwargs):
+    def fit_regularized(
+        self, ndim=1, pen_mat=None, slice_n=20, maxiter=100, gtol=1e-3, **kwargs
+    ):
         """
         Estimate the EDR space using regularized SIR.
 
@@ -181,6 +187,9 @@ class SlicedInverseReg(_DimReductionRegression):
         gtol : float
             If the norm of the gradient of the objective function
             falls below this value, the algorithm has converged.
+        **kwargs
+            Extra keyword arguments. These trigger a RuntimeWarning; ``start_params``
+            can provide starting values.
 
         Returns
         -------
@@ -199,11 +208,11 @@ class SlicedInverseReg(_DimReductionRegression):
         L. Ferre, A.F. Yao (2003).  Functional sliced inverse regression
         analysis.  Statistics: a journal of theoretical and applied
         statistics 37(6) 475-488.
-        """
 
+        """
         if len(kwargs) > 0:
             msg = "SIR.fit_regularized does not take keyword arguments"
-            warnings.warn(msg)
+            warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
         if pen_mat is None:
             raise ValueError("pen_mat is a required argument")
@@ -241,21 +250,21 @@ class SlicedInverseReg(_DimReductionRegression):
         if start_params is None:
             params = np.zeros((self.k_vars, ndim))
             params[0:ndim, 0:ndim] = np.eye(ndim)
-            params = params
         else:
             if start_params.shape[1] != ndim:
                 msg = "Shape of start_params is not compatible with ndim"
                 raise ValueError(msg)
             params = start_params
 
-        params, _, cnvrg = _grass_opt(params, self._regularized_objective,
-                                      self._regularized_grad, maxiter, gtol)
+        params, _, cnvrg = _grass_opt(
+            params, self._regularized_objective, self._regularized_grad, maxiter, gtol
+        )
 
         if not cnvrg:
             g = self._regularized_grad(params.ravel())
             gn = np.sqrt(np.dot(g, g))
             msg = "SIR.fit_regularized did not converge, |g|=%f" % gn
-            warnings.warn(msg)
+            warnings.warn(msg, ConvergenceWarning, stacklevel=2)
 
         results = DimReductionResults(self, params, eigs=None)
         return DimReductionResultsWrapper(results)
@@ -282,6 +291,7 @@ class PrincipalHessianDirections(_DimReductionRegression):
     KC Li (1992).  On Principal Hessian Directions for Data
     Visualization and Dimension Reduction: Another application
     of Stein's lemma. JASA 87:420.
+
     """
 
     def fit(self, **kwargs):
@@ -294,13 +304,15 @@ class PrincipalHessianDirections(_DimReductionRegression):
             If True, use least squares regression to remove the
             linear relationship between each covariate and the
             response, before conducting PHD.
+        **kwargs
+            Additional keyword arguments. May include ``resid``.
 
         Returns
         -------
         A results instance which can be used to access the estimated
         parameters.
-        """
 
+        """
         resid = kwargs.get("resid", False)
 
         y = self.endog - self.endog.mean()
@@ -308,10 +320,11 @@ class PrincipalHessianDirections(_DimReductionRegression):
 
         if resid:
             from statsmodels.regression.linear_model import OLS
+
             r = OLS(y, x).fit()
             y = r.resid
 
-        cm = np.einsum('i,ij,ik->jk', y, x, x)
+        cm = np.einsum("i,ij,ik->jk", y, x, x)
         cm /= len(y)
 
         cx = np.cov(x.T)
@@ -348,6 +361,7 @@ class SlicedAverageVarianceEstimation(_DimReductionRegression):
     Y Li, L-X Zhu (2007). Asymptotics for sliced average
     variance estimation.  The Annals of Statistics.
     https://arxiv.org/pdf/0708.0462.pdf
+
     """
 
     def __init__(self, endog, exog, **kwargs):
@@ -365,8 +379,10 @@ class SlicedAverageVarianceEstimation(_DimReductionRegression):
         ----------
         slice_n : int
             Number of observations per slice
-        """
+        **kwargs
+            Additional keyword arguments. May include ``slice_n``.
 
+        """
         # Sample size per slice
         slice_n = kwargs.get("slice_n", 50)
 
@@ -407,8 +423,8 @@ class SlicedAverageVarianceEstimation(_DimReductionRegression):
             vn /= self.exog.shape[0]
 
             c = np.mean(ns)
-            k1 = c * (c - 1) / ((c - 1)**2 + 1)
-            k2 = (c - 1) / ((c - 1)**2 + 1)
+            k1 = c * (c - 1) / ((c - 1) ** 2 + 1)
+            k2 = (c - 1) / ((c - 1) ** 2 + 1)
             av2 = k1 * av - k2 * vn
 
             vm = np.eye(p) - 2 * sum(cv) / len(cv) + av2
@@ -434,22 +450,22 @@ class DimReductionResults(model.Results):
     methods produce a corresponding set of eigenvalues
     (`eigs`) that indicate how much information is contained
     in each basis direction.
+
     """
 
     def __init__(self, model, params, eigs):
-        super().__init__(
-              model, params)
+        super().__init__(model, params)
         self.eigs = eigs
 
 
 class DimReductionResultsWrapper(wrap.ResultsWrapper):
     _attrs = {
-        'params': 'columns',
+        "params": "columns",
     }
     _wrap_attrs = _attrs
 
-wrap.populate_wrapper(DimReductionResultsWrapper,  # noqa:E305
-                      DimReductionResults)
+
+wrap.populate_wrapper(DimReductionResultsWrapper, DimReductionResults)
 
 
 def _grass_opt(params, fun, grad, maxiter, gtol):
@@ -488,8 +504,8 @@ def _grass_opt(params, fun, grad, maxiter, gtol):
     A Edelman, TA Arias, ST Smith (1998).  The geometry of algorithms with
     orthogonality constraints. SIAM J Matrix Anal Appl.
     http://math.mit.edu/~edelman/publications/geometry_of_algorithms.pdf
-    """
 
+    """
     p, d = params.shape
     params = params.ravel()
 
@@ -512,16 +528,16 @@ def _grass_opt(params, fun, grad, maxiter, gtol):
         paramsm = params.reshape((p, d))
         pa0 = np.dot(paramsm, vt.T)
 
-        def geo(t):
+        def geo(t, pa0, s, u, vt):
             # Parameterize the geodesic path in the direction
             # of the gradient as a function of a real value t.
             pa = pa0 * np.cos(s * t) + u * np.sin(s * t)
             return np.dot(pa, vt).ravel()
 
         # Try to find a downhill step along the geodesic path.
-        step = 2.
+        step = 2.0
         while step > 1e-10:
-            pa = geo(-step)
+            pa = geo(-step, pa0, s, u, vt)
             f1 = fun(pa)
             if f1 < f0:
                 params = pa
@@ -571,6 +587,7 @@ class CovarianceReduction(_DimReductionRegression):
     A Edelman, TA Arias, ST Smith (1998).  The geometry of algorithms with
     orthogonality constraints. SIAM J Matrix Anal Appl.
     http://math.mit.edu/~edelman/publications/geometry_of_algorithms.pdf
+
     """
 
     def __init__(self, endog, exog, dim):
@@ -607,8 +624,8 @@ class CovarianceReduction(_DimReductionRegression):
             to 1d.
 
         Returns the log-likelihood.
-        """
 
+        """
         p = self.covm.shape[0]
         proj = params.reshape((p, self.dim))
 
@@ -634,8 +651,8 @@ class CovarianceReduction(_DimReductionRegression):
             flattened to 1d.
 
         Returns the score function evaluated at 'params'.
-        """
 
+        """
         p = self.covm.shape[0]
         proj = params.reshape((p, self.dim))
 
@@ -668,8 +685,8 @@ class CovarianceReduction(_DimReductionRegression):
         -------
         A results instance that can be used to access the
         fitted parameters.
-        """
 
+        """
         p = self.covm.shape[0]
         d = self.dim
 
@@ -677,21 +694,20 @@ class CovarianceReduction(_DimReductionRegression):
         if start_params is None:
             params = np.zeros((p, d))
             params[0:d, 0:d] = np.eye(d)
-            params = params
         else:
             params = start_params
 
         # _grass_opt is designed for minimization, we are doing maximization
         # here so everything needs to be flipped.
-        params, llf, cnvrg = _grass_opt(params, lambda x: -self.loglike(x),
-                                        lambda x: -self.score(x), maxiter,
-                                        gtol)
+        params, llf, cnvrg = _grass_opt(
+            params, lambda x: -self.loglike(x), lambda x: -self.score(x), maxiter, gtol
+        )
         llf *= -1
         if not cnvrg:
             g = self.score(params.ravel())
             gn = np.sqrt(np.sum(g * g))
             msg = "CovReduce optimization did not converge, |g|=%f" % gn
-            warnings.warn(msg, ConvergenceWarning)
+            warnings.warn(msg, ConvergenceWarning, stacklevel=2)
 
         results = DimReductionResults(self, params, eigs=None)
         results.llf = llf

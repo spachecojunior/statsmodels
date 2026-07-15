@@ -346,7 +346,6 @@ to one way ANOVA, but still in development
    CorrelationEffects
    OLSEffects
    ForwardEffects
-   OLSEffects
    RegModelEffects
 
 The following functions are not (yet) public
@@ -366,7 +365,6 @@ The following functions are not (yet) public
    ccols
    compare_ordered
    distance_st_range
-   ecdf
    get_tukeyQcrit
    homogeneous_subsets
    maxzero
@@ -379,6 +377,15 @@ The following functions are not (yet) public
    set_partition
    set_remove_subs
    tiecorrect
+
+
+.. currentmodule:: statsmodels.stats.multitest
+
+.. autosummary::
+   :toctree: generated/
+
+   _ecdf
+
 
 .. _tost:
 
@@ -492,7 +499,6 @@ proportions that can be used with NormalIndPower.
    proportions_chisquare_allpairs
    proportions_chisquare_pairscontrol
 
-   proportion_effectsize
    power_binom_tost
    power_ztost_prop
    samplesize_confint_proportion

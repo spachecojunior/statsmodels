@@ -1,20 +1,24 @@
 """
 Miscellaneous utility code for VAR estimation
 """
+
 from statsmodels.compat.pandas import frequencies
 from statsmodels.compat.python import asbytes
-from statsmodels.tools.validation import array_like, int_like
 
 import numpy as np
 import pandas as pd
-from scipy import stats, linalg
+from scipy import linalg, stats
 
+from statsmodels.tools.rng_qrng import check_random_state
+from statsmodels.tools.validation import array_like, int_like
 import statsmodels.tsa.tsatools as tsa
 
-#-------------------------------------------------------------------------------
+#
 # Auxiliary functions for estimation
+#
 
-def get_var_endog(y, lags, trend='c', has_constant='skip'):
+
+def get_var_endog(y, lags, trend="c", has_constant="skip"):
     """
     Make predictor matrix for VAR(p) process
 
@@ -27,25 +31,24 @@ def get_var_endog(y, lags, trend='c', has_constant='skip'):
     """
     nobs = len(y)
     # Ravel C order, need to put in descending order
-    Z = np.array([y[t-lags : t][::-1].ravel() for t in range(lags, nobs)])
+    Z = np.array([y[t - lags : t][::-1].ravel() for t in range(lags, nobs)])
 
     # Add constant, trend, etc.
-    if trend != 'n':
-        Z = tsa.add_trend(Z, prepend=True, trend=trend,
-                          has_constant=has_constant)
+    if trend != "n":
+        Z = tsa.add_trend(Z, prepend=True, trend=trend, has_constant=has_constant)
 
     return Z
 
 
-def get_trendorder(trend='c'):
+def get_trendorder(trend="c"):
     # Handle constant, etc.
-    if trend == 'c':
+    if trend == "c":
         trendorder = 1
-    elif trend in ('n', 'nc'):
+    elif trend in ("n", "nc"):
         trendorder = 0
-    elif trend == 'ct':
+    elif trend == "ct":
         trendorder = 2
-    elif trend == 'ctt':
+    elif trend == "ctt":
         trendorder = 3
     else:
         raise ValueError(f"Unkown trend: {trend}")
@@ -69,20 +72,20 @@ def make_lag_names(names, lag_order, trendorder=1, exog=None):
     for i in range(1, lag_order + 1):
         for name in names:
             if not isinstance(name, str):
-                name = str(name) # will need consistent unicode handling
-            lag_names.append('L'+str(i)+'.'+name)
+                name = str(name)  # will need consistent unicode handling
+            lag_names.append("L" + str(i) + "." + name)
 
     # handle the constant name
     if trendorder != 0:
-        lag_names.insert(0, 'const')
+        lag_names.insert(0, "const")
     if trendorder > 1:
-        lag_names.insert(1, 'trend')
+        lag_names.insert(1, "trend")
     if trendorder > 2:
-        lag_names.insert(2, 'trend**2')
+        lag_names.insert(2, "trend**2")
     if exog is not None:
         if isinstance(exog, pd.Series):
             exog = pd.DataFrame(exog)
-        elif not hasattr(exog, 'ndim'):
+        elif not hasattr(exog, "ndim"):
             exog = np.asarray(exog)
         if exog.ndim == 1:
             exog = exog[:, None]
@@ -107,7 +110,7 @@ def comp_matrix(coefs):
     """
     p, k1, k2 = coefs.shape
     if k1 != k2:
-        raise ValueError('coefs must be 3-d with shape (p, k, k).')
+        raise ValueError("coefs must be 3-d with shape (p, k, k).")
 
     kp = k1 * p
 
@@ -116,15 +119,17 @@ def comp_matrix(coefs):
 
     # Set I_K matrices
     if p > 1:
-        result[np.arange(k1, kp), np.arange(kp-k1)] = 1
+        result[np.arange(k1, kp), np.arange(kp - k1)] = 1
 
     return result
 
-#-------------------------------------------------------------------------------
+
+#
 # Miscellaneous stuff
+#
 
 
-def parse_lutkepohl_data(path): # pragma: no cover
+def parse_lutkepohl_data(path):  # pragma: no cover
     """
     Parse data files from Lütkepohl (2005) book
 
@@ -135,13 +140,13 @@ def parse_lutkepohl_data(path): # pragma: no cover
     from datetime import datetime
     import re
 
-    regex = re.compile(asbytes(r'<(.*) (\w)([\d]+)>.*'))
-    with open(path, 'rb') as f:
+    regex = re.compile(asbytes(r"<(.*) (\w)([\d]+)>.*"))
+    with open(path, "rb") as f:
         lines = deque(f)
 
     to_skip = 0
-    while asbytes('*/') not in lines.popleft():
-        #while '*/' not in lines.popleft():
+    while asbytes("*/") not in lines.popleft():
+        # while '*/' not in lines.popleft():
         to_skip += 1
 
     while True:
@@ -152,8 +157,9 @@ def parse_lutkepohl_data(path): # pragma: no cover
             year, freq, start_point = m.groups()
             break
 
-    data = (pd.read_csv(path, delimiter=r"\s+", header=to_skip+1)
-            .to_records(index=False))
+    data = pd.read_csv(path, delimiter=r"\s+", header=to_skip + 1).to_records(
+        index=False
+    )
 
     n = len(data)
 
@@ -162,9 +168,9 @@ def parse_lutkepohl_data(path): # pragma: no cover
     year = int(year)
 
     offsets = {
-        asbytes('Q'): frequencies.BQuarterEnd(),
-        asbytes('M'): frequencies.BMonthEnd(),
-        asbytes('A'): frequencies.BYearEnd()
+        asbytes("Q"): frequencies.BQuarterEnd(),
+        asbytes("M"): frequencies.BMonthEnd(),
+        asbytes("A"): frequencies.BYearEnd(),
     }
 
     # create an instance
@@ -189,7 +195,15 @@ def acf_to_acorr(acf):
     return acf / np.sqrt(np.outer(diag, diag))
 
 
-def varsim(coefs, intercept, sig_u, steps=100, initial_values=None, seed=None, nsimulations=None):
+def varsim(
+    coefs,
+    intercept,
+    sig_u,
+    steps=100,
+    initial_values=None,
+    seed=None,
+    nsimulations=None,
+):
     """
     Simulate VAR(p) process, given coefficients and assuming Gaussian noise
 
@@ -233,10 +247,10 @@ def varsim(coefs, intercept, sig_u, steps=100, initial_values=None, seed=None, n
         Endog of the simulated VAR process. Shape will be (nsimulations, steps, neqs)
         or (steps, neqs) if `nsimulations` is None.
     """
-    rs = np.random.RandomState(seed=seed)
+    rs = check_random_state(seed, deprecated=True, warn=False)
     rmvnorm = rs.multivariate_normal
-    p, k, k = coefs.shape
-    nsimulations= int_like(nsimulations, "nsimulations", optional=True)
+    p, k, _ = coefs.shape
+    nsimulations = int_like(nsimulations, "nsimulations", optional=True)
     if isinstance(nsimulations, int) and nsimulations <= 0:
         raise ValueError("nsimulations must be a positive integer if provided")
     if nsimulations is None:
@@ -246,30 +260,36 @@ def varsim(coefs, intercept, sig_u, steps=100, initial_values=None, seed=None, n
         result_shape = (nsimulations, steps, k)
     if sig_u is None:
         sig_u = np.eye(k)
-    ugen = rmvnorm(np.zeros(len(sig_u)), sig_u, steps*nsimulations).reshape(nsimulations, steps, k)
+    ugen = rmvnorm(np.zeros(len(sig_u)), sig_u, steps * nsimulations).reshape(
+        nsimulations, steps, k
+    )
     result = np.zeros((nsimulations, steps, k))
     if intercept is not None:
         # intercept can be 2-D like an offset variable
         if np.ndim(intercept) > 1:
             if not len(intercept) == ugen.shape[1]:
-                raise ValueError('2-D intercept needs to have length `steps`')
+                raise ValueError("2-D intercept needs to have length `steps`")
         # add intercept/offset also to intial values
         result += intercept
-        result[:,p:] += ugen[:,p:]
+        result[:, p:] += ugen[:, p:]
     else:
-        result[:,p:] = ugen[:,p:]
+        result[:, p:] = ugen[:, p:]
 
-    initial_values = array_like(initial_values, "initial_values", optional=True, maxdim=2)
+    initial_values = array_like(
+        initial_values, "initial_values", optional=True, maxdim=2
+    )
     if initial_values is not None:
         if not (initial_values.shape == (p, k) or initial_values.shape == (k,)):
-            raise ValueError("initial_values should have shape (p, k) or (k,) where p is the number of lags and k is the number of equations.")
-        result[:,:p] = initial_values
+            raise ValueError(
+                "initial_values should have shape (p, k) or (k,) where p is the number of lags and k is the number of equations."
+            )
+        result[:, :p] = initial_values
 
     # add in AR terms
     for t in range(p, steps):
-        ygen = result[:,t]
+        ygen = result[:, t]
         for j in range(p):
-            ygen += np.dot(coefs[j], result[:,t-j-1].T).T
+            ygen += np.dot(coefs[j], result[:, t - j - 1].T).T
 
     return result.reshape(result_shape)
 
@@ -284,7 +304,7 @@ def get_index(lst, name):
     return result
 
 
-#method used repeatedly in Sims-Zha error bands
+# method used repeatedly in Sims-Zha error bands
 def eigval_decomp(sym_array):
     """
     Returns
@@ -293,7 +313,7 @@ def eigval_decomp(sym_array):
     eigva: list of eigenvalues
     k: largest eigenvector
     """
-    #check if symmetric, do not include shock period
+    # check if symmetric, do not include shock period
     eigva, W = linalg.eig(sym_array, left=True, right=False)
     k = np.argmax(eigva)
     return W, eigva, k
@@ -307,14 +327,14 @@ def vech(A):
     vechvec: vector of all elements on and below diagonal
     """
 
-    length=A.shape[1]
-    vechvec=[]
+    length = A.shape[1]
+    vechvec = []
     for i in range(length):
-        b=i
+        b = i
         while b < length:
-            vechvec.append(A[b,i])
-            b=b+1
-    vechvec=np.asarray(vechvec)
+            vechvec.append(A[b, i])
+            b = b + 1
+    vechvec = np.asarray(vechvec)
     return vechvec
 
 
@@ -348,7 +368,7 @@ def seasonal_dummies(n_seasons, len_endog, first_period=0, centered=False):
     if n_seasons > 0:
         season_exog = np.zeros((len_endog, n_seasons - 1))
         for i in range(n_seasons - 1):
-            season_exog[(i-first_period) % n_seasons::n_seasons, i] = 1
+            season_exog[(i - first_period) % n_seasons :: n_seasons, i] = 1
 
         if centered:
             season_exog -= 1 / n_seasons

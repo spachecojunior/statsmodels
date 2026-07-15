@@ -25,7 +25,9 @@ https://candes.su.domains/publications/downloads/FDR_regression.pdf
 
 import numpy as np
 import pandas as pd
+
 from statsmodels.iolib import summary2
+from statsmodels.tools.rng_qrng import check_random_state
 
 
 class RegressionFDR:
@@ -44,6 +46,10 @@ class RegressionFDR:
     method : str
         The approach used to assess and control FDR, currently
         must be 'knockoff'.
+    rng : int, np.random.RandomState or np.random.Generator, optional
+        Random number generator or seed for constructing the knockoff
+        design matrix.  If None, the NumPy singleton RandomState instance
+        is used.
 
     Returns
     -------
@@ -70,8 +76,7 @@ class RegressionFDR:
     sdp approach requires that the cvxopt package be installed.
     """
 
-    def __init__(self, endog, exog, regeffects, method="knockoff",
-                 **kwargs):
+    def __init__(self, endog, exog, regeffects, method="knockoff", rng=None, **kwargs):
 
         if hasattr(exog, "columns"):
             self.xnames = exog.columns
@@ -84,12 +89,11 @@ class RegressionFDR:
         if "design_method" not in kwargs:
             kwargs["design_method"] = "equi"
 
-        nobs, nvar = exog.shape
-
+        self.rng = check_random_state(rng)
         if kwargs["design_method"] == "equi":
-            exog1, exog2, _ = _design_knockoff_equi(exog)
+            exog1, exog2, _ = _design_knockoff_equi(exog, self.rng)
         elif kwargs["design_method"] == "sdp":
-            exog1, exog2, _ = _design_knockoff_sdp(exog)
+            exog1, exog2, _ = _design_knockoff_sdp(exog, self.rng)
         endog = endog - np.mean(endog)
 
         self.endog = endog
@@ -99,8 +103,7 @@ class RegressionFDR:
 
         self.stats = regeffects.stats(self)
 
-        unq, inv, cnt = np.unique(self.stats, return_inverse=True,
-                                  return_counts=True)
+        unq, inv, cnt = np.unique(self.stats, return_inverse=True, return_counts=True)
 
         # The denominator of the FDR
         cc = np.cumsum(cnt)
@@ -108,7 +111,7 @@ class RegressionFDR:
         denom[denom < 1] = 1
 
         # The numerator of the FDR
-        ii = np.searchsorted(unq, -unq, side='right') - 1
+        ii = np.searchsorted(unq, -unq, side="right") - 1
         numer = cc[ii]
         numer[ii < 0] = 0
 
@@ -148,7 +151,7 @@ class RegressionFDR:
         return summ
 
 
-def _design_knockoff_sdp(exog):
+def _design_knockoff_sdp(exog, rng):
     """
     Use semidefinite programming to construct a knockoff design
     matrix.
@@ -157,9 +160,9 @@ def _design_knockoff_sdp(exog):
     """
 
     try:
-        from cvxopt import solvers, matrix
-    except ImportError:
-        raise ValueError("SDP knockoff designs require installation of cvxopt")
+        from cvxopt import matrix, solvers
+    except ImportError as exc:
+        raise ValueError("SDP knockoff designs require installation of cvxopt") from exc
 
     nobs, nvar = exog.shape
 
@@ -180,21 +183,21 @@ def _design_knockoff_sdp(exog):
     h1 = 2 * Sigma
     h1 = matrix(h1)
     i, j = np.diag_indices(nvar)
-    G1 = np.zeros((nvar*nvar, nvar))
-    G1[i*nvar + j, i] = 1
+    G1 = np.zeros((nvar * nvar, nvar))
+    G1[i * nvar + j, i] = 1
     G1 = matrix(G1)
 
-    solvers.options['show_progress'] = False
+    solvers.options["show_progress"] = False
     sol = solvers.sdp(c, G0, h0, [G1], [h1])
-    sl = np.asarray(sol['x']).ravel()
+    sl = np.asarray(sol["x"]).ravel()
 
     xcov = np.dot(exog.T, exog)
-    exogn = _get_knmat(exog, xcov, sl)
+    exogn = _get_knmat(exog, xcov, sl, rng)
 
     return exog, exogn, sl
 
 
-def _design_knockoff_equi(exog):
+def _design_knockoff_equi(exog, rng):
     """
     Construct an equivariant design matrix for knockoff analysis.
 
@@ -210,7 +213,7 @@ def _design_knockoff_equi(exog):
 
     nobs, nvar = exog.shape
 
-    if nobs < 2*nvar:
+    if nobs < 2 * nvar:
         msg = "The equivariant knockoff can ony be used when n >= 2*p"
         raise ValueError(msg)
 
@@ -221,31 +224,38 @@ def _design_knockoff_equi(exog):
 
     xcov = np.dot(exog.T, exog)
     ev, _ = np.linalg.eig(xcov)
+
+    if np.iscomplexobj(ev):
+        if np.all(ev.imag == 0):
+            ev = ev.real
+        else:
+            raise RuntimeError("Expected real eigenvalues, got imaginary.")
     evmin = np.min(ev)
 
-    sl = min(2*evmin, 1)
+    sl = min(2 * evmin, 1)
     sl = sl * np.ones(nvar)
 
-    exogn = _get_knmat(exog, xcov, sl)
+    exogn = _get_knmat(exog, xcov, sl, rng)
 
     return exog, exogn, sl
 
 
-def _get_knmat(exog, xcov, sl):
+def _get_knmat(exog, xcov, sl, rng):
     # Utility function, see equation 2.2 of Barber & Candes.
 
     nobs, nvar = exog.shape
 
     ash = np.linalg.inv(xcov)
-    ash *= -np.outer(sl, sl)
+    # Change for numpy returning complex128
+    ash = ash * -np.outer(sl, sl)
+
     i, j = np.diag_indices(nvar)
     ash[i, j] += 2 * sl
 
-    umat = np.random.normal(size=(nobs, nvar))
+    umat = rng.normal(size=(nobs, nvar))
     u, _ = np.linalg.qr(exog)
     umat -= np.dot(u, np.dot(u.T, umat))
     umat, _ = np.linalg.qr(umat)
-
     ashr, xc, _ = np.linalg.svd(ash, 0)
     ashr *= np.sqrt(xc)
     ashr = ashr.T

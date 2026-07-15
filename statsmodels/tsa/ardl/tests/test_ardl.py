@@ -149,7 +149,7 @@ def _convert_to_numpy(data, fixed, order, seasonal, use_numpy):
         y = np.asarray(y)
         x = np.asarray(x)
         if isinstance(order, dict):
-            order = {i: v for i, v in enumerate(order.values())}
+            order = dict(enumerate(order.values()))
         if fixed is not None:
             z = np.asarray(fixed)
         period = 4 if seasonal else None
@@ -238,8 +238,8 @@ def test_ardl_order_keys_exceptions(data):
 def test_ardl_deterministic_exceptions(data):
     with pytest.raises(TypeError):
         ARDL(data.y, 2, data.x, 2, deterministic="seasonal")
+    deterministic = DeterministicProcess(data.y.index, constant=True, order=1)
     with pytest.warns(SpecificationWarning, match="When using deterministic, trend"):
-        deterministic = DeterministicProcess(data.y.index, constant=True, order=1)
         ARDL(data.y, 2, data.x, 2, deterministic=deterministic, trend="ct")
 
 
@@ -249,10 +249,11 @@ def test_ardl_holdback_exceptions(data):
 
 
 def test_ardl_fixed_exceptions(data):
-    fixed = np.random.standard_normal((2, 200))
+    rs = np.random.RandomState(992711)
+    fixed = rs.standard_normal((2, 200))
     with pytest.raises(ValueError, match="fixed must be an"):
         ARDL(data.y, 2, data.x, 2, fixed=fixed)
-    fixed = np.random.standard_normal((dane_data.lrm.shape[0], 2))
+    fixed = rs.standard_normal((dane_data.lrm.shape[0], 2))
     fixed[20, 0] = -np.inf
     with pytest.raises(ValueError, match="fixed must be an"):
         ARDL(data.y, 2, data.x, 2, fixed=fixed)
@@ -405,6 +406,7 @@ def test_ardl_parameter_names(data):
     assert mod.exog_names == expected
 
 
+@pytest.mark.thread_unsafe(reason="Uses matplotlib")
 @pytest.mark.matplotlib
 def test_diagnostics_plot(data, close_figures):
     import matplotlib.figure
@@ -569,6 +571,7 @@ def test_get_prediction(data):
     assert_allclose(pred.var_pred_mean, ar_pred.var_pred_mean)
 
 
+@pytest.mark.thread_unsafe(reason="Uses matplotlib")
 @pytest.mark.matplotlib
 @pytest.mark.smoke
 @pytest.mark.parametrize("trend", ["n", "c", "ct"])
@@ -821,3 +824,31 @@ def test_resids_ardl_uecm():
     uecm_res = uecm_mod.fit()
 
     assert_allclose(uecm_res.resid, ardl_res.resid)
+
+
+@pytest.mark.parametrize("y_lags", [None, 1, 2])
+@pytest.mark.parametrize("x_lags", [None, 1, 2])
+@pytest.mark.parametrize("causal", [True, False])
+def test_ardl_trend_ctt(data, y_lags, x_lags, causal):
+    """Test ARDL with trend='ctt'."""
+    res = ARDL(data.y, y_lags, data.x, x_lags, trend="ctt", causal=causal).fit()
+    n_x = data.x.shape[1]
+    n_params = 3
+    n_params += y_lags if y_lags else 0
+    n_params += n_x * (int(not causal) + x_lags) if x_lags else 0
+    assert res.params.shape[0] == n_params
+    check_results(res)
+
+
+def test_uecm_resid():
+    """Test that UECMResults.resid is computed correctly using model._y."""
+    mod = UECM(
+        dane_data.lrm,
+        3,
+        dane_data[["lry", "ibo", "ide"]],
+        {"lry": 1, "ibo": 3, "ide": 2},
+    )
+    res = mod.fit()
+
+    # Assert that the override fix is working
+    np.testing.assert_allclose(res.resid, res.model._y - res.fittedvalues)

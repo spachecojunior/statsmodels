@@ -11,11 +11,12 @@ https://en.wikipedia.org/wiki/Kernel_%28statistics%29
 
 Silverman, B.W.  Density Estimation for Statistics and Data Analysis.
 """
+
 import numpy as np
 from scipy import integrate, stats
 
 from statsmodels.sandbox.nonparametric import kernels
-from statsmodels.tools.decorators import cache_readonly
+from statsmodels.tools._decorators import cache_readonly
 from statsmodels.tools.validation import array_like, float_like
 
 from . import bandwidths
@@ -33,15 +34,15 @@ kernel_switch = dict(
     triw=kernels.Triweight,
     cos=kernels.Cosine,
     cos2=kernels.Cosine2,
-    tric=kernels.Tricube
+    tric=kernels.Tricube,
 )
 
 
 def _checkisfit(self):
     try:
-        self.density
-    except Exception:
-        raise ValueError("Call fit to fit the density first")
+        _ = self.density
+    except Exception as exc:
+        raise ValueError("Call fit to fit the density first") from exc
 
 
 # Kernel Density Estimator Class
@@ -66,8 +67,9 @@ class KDEUnivariate:
 
     See Also
     --------
-    KDEMultivariate
-    kdensity, kdensityfft
+    KDEMultivariate : Multivariate Kernel Density Estimator.
+    kdensity : Kernel density estimator using direct evaluation.
+    kdensityfft : Kernel density estimator using FFT, faster than kdensity for large nobs.
 
     Examples
     --------
@@ -265,7 +267,7 @@ class KDEUnivariate:
 
         def entr(x, s):
             pdf = kern.density(s, x)
-            return pdf * np.log(pdf + 1e-12)
+            return np.squeeze(pdf * np.log(pdf + 1e-12))
 
         kern = self.kernel
 
@@ -422,17 +424,13 @@ def kdensity(
     b = np.max(x, axis=0) + cut * bw
     grid = np.linspace(a, b, gridsize)
 
-    k = (
-        x.T - grid[:, None]
-    ) / bw  # uses broadcasting to make a gridsize x nobs
+    k = (x.T - grid[:, None]) / bw  # uses broadcasting to make a gridsize x nobs
 
     # set kernel bandwidth
     kern.seth(bw)
 
     # truncate to domain
-    if (
-        kern.domain is not None
-    ):  # will not work for piecewise kernels like parzen
+    if kern.domain is not None:  # will not work for piecewise kernels like parzen
         z_lo, z_high = kern.domain
         domain_mask = (k < z_lo) | (k > z_high)
         k = kern(k)  # estimate density
@@ -537,7 +535,7 @@ def kdensityfft(
         curve estimators`. Journal of Computational and Graphical Statistics.
         3.1, 35-56.
     Jones, M.C. and H.W. Lotwick. (1984) `Remark AS R50: A Remark on Algorithm
-        AS 176. Kernal Density Estimation Using the Fast Fourier Transform`.
+        AS 176. Kernel Density Estimation Using the Fast Fourier Transform`.
         Journal of the Royal Statistical Society. Series C. 33.1, 120-2.
     Silverman, B.W. (1982) `Algorithm AS 176. Kernel density estimation using
         the Fast Fourier Transform. Journal of the Royal Statistical Society.
@@ -578,7 +576,7 @@ def kdensityfft(
     # This is the Silverman binning function, but I believe it's buggy (SS)
     # weighting according to Silverman
     #    count = counts(x,grid)
-    #    binned = np.zeros_like(grid)    #xi_{k} in Silverman
+    #    binned = np.zeros_like(grid)    # xi_{k} in Silverman
     #    j = 0
     #    for k in range(int(gridsize-1)):
     #        if count[k]>0: # there are points of x in the grid here
